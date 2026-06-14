@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SuperInstance Conservation Explorer</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-panel: #0f1620;
+    --bg-elevated: #131c2a;
+    --border: #1e2b3d;
+    --border-bright: #2a3f5f;
+    --text: #c8d6e5;
+    --text-bright: #e8f0ff;
+    --text-dim: #5a6f88;
+    --accent: #00f5d4;
+    --accent-dim: #00a896;
+    --accent2: #ff2e88;
+    --accent3: #7c5cff;
+    --accent4: #ffd93d;
+    --accent5: #ff6b35;
+    --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(30,43,61,0.3) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(30,43,61,0.3) 1px, transparent 1px);
+    background-size: 50px 50px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(0,245,212,0.08), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    margin-bottom: 3rem;
+    position: relative;
+  }
+
+  header h1 {
+    font-size: 2.8rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--accent), var(--accent3), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+  }
+
+  header .subtitle {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  header .crab-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin: 1.5rem auto;
+    height: 60px;
+    overflow: hidden;
+    max-width: 600px;
+    position: relative;
+  }
+
+  .shell-stack {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .shell {
+    padding: 6px 14px;
+    border: 1px solid var(--border-bright);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    background: var(--bg-elevated);
+    transition: all 0.3s;
+    position: relative;
+  }
+
+  .shell.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 12px rgba(0,245,212,0.3);
+  }
+
+  #crab {
+    position: absolute;
+    font-size: 1.3rem;
+    transition: left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 2;
+    text-shadow: 0 0 10px rgba(0,245,212,0.5);
+  }
+
+  /* Panels */
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+
+  .panel-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text-bright);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .panel-title .num {
+    color: var(--accent);
+    font-size: 0.8rem;
+    border: 1px solid var(--accent-dim);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-weight: 400;
+  }
+
+  .panel-tag {
+    font-size: 0.7rem;
+    color: var(--accent);
+    border: 1px solid var(--accent-dim);
+    border-radius: 4px;
+    padding: 3px 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* Sliders */
+  .slider-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.5rem;
+  }
+
+  .slider-label .name {
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .slider-label .value {
+    color: var(--accent);
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0,245,212,0.4);
+    transition: transform 0.15s;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 10px rgba(0,245,212,0.4);
+  }
+
+  /* Stats */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .stat {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .stat .stat-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.4rem;
+  }
+
+  .stat .stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+
+  .stat .stat-value.highlight { color: var(--accent); }
+  .stat .stat-value.pink { color: var(--accent2); }
+  .stat .stat-value.purple { color: var(--accent3); }
+  .stat .stat-value.gold { color: var(--accent4); }
+
+  /* SVG containers */
+  .viz-container {
+    width: 100%;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(10,14,20,0.5);
+  }
+
+  svg { display: block; width: 100%; }
+
+  /* Formula display */
+  .formula-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+    padding: 1rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 1rem 0;
+  }
+
+  .formula-item {
+    padding: 0.4rem 0.8rem;
+    background: rgba(0,245,212,0.05);
+    border: 1px solid rgba(0,245,212,0.15);
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
+
+  .formula-item .katex { color: var(--text-bright); }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 2rem 0;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
+  }
+
+  footer a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  /* Bar chart */
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .bar-label {
+    width: 80px;
+    text-align: right;
+    font-size: 0.85rem;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 28px;
+    background: var(--bg-elevated);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    font-size: 0.75rem;
+    color: rgba(0,0,0,0.85);
+    font-weight: 700;
+    transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .bar-value {
+    width: 90px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    header h1 { font-size: 1.8rem; }
+    .panel { padding: 1.2rem; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .bar-label { width: 60px; font-size: 0.75rem; }
+    .bar-value { width: 65px; font-size: 0.7rem; }
+  }
+
+  /* Scan line effect */
+  .scan-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: scan 4s linear infinite;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  @keyframes scan {
+    0% { top: 0; opacity: 0; }
+    10% { opacity: 0.6; }
+    90% { opacity: 0.6; }
+    100% { top: 100%; opacity: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER + HERMIT CRAB -->
+  <header>
+    <h1>🦀 SuperInstance Conservation Explorer</h1>
+    <p class="subtitle">γ + η = C · Shannon Chain Rule · Fleet Cancellation Dynamics</p>
+    <div class="crab-container" id="crabContainer">
+      <div class="shell-stack" id="shellStack"></div>
+      <div id="crab">🦀</div>
+    </div>
+  </header>
+
+  <!-- PANEL 1: FLEET CANCELLATION -->
+  <div class="panel">
+    <div class="scan-line"></div>
+    <div class="panel-header">
+      <div class="panel-title">
+        <span class="num">01</span>
+        Fleet Cancellation Visualizer
+      </div>
+      <div class="panel-tag">δ(n) dynamics</div>
+    </div>
+
+    <div class="slider-group">
+      <div class="slider-label">
+        <span class="name">Fleet Size (N)</span>
+        <span class="value" id="nValue">50</span>
+      </div>
+      <input type="range" id="nSlider" min="0" max="1000" value="50" step="1">
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="stat-label">N (fleet size)</div>
+        <div class="stat-value highlight" id="nDisplay">50</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">δ(n) residual</div>
+        <div class="stat-value pink" id="deltaDisplay">0.129</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Cancellation</div>
+        <div class="stat-value gold" id="cancellationDisplay">86.3%</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Signal entropy</div>
+        <div class="stat-value purple" id="entropyDisplay">1.585 bits</div>
+      </div>
+    </div>
+
+    <div class="viz-container" id="cancellationViz"></div>
+
+    <div class="formula-bar">
+      <div class="formula-item" id="formula-delta"></div>
+      <div class="formula-item" id="formula-cancellation"></div>
+    </div>
+  </div>
+
+  <!-- PANEL 2: CONSERVATION IDENTITY -->
+  <div class="panel">
+    <div class="scan-line" style="animation-delay: 2s;"></div>
+    <div class="panel-header">
+      <div class="panel-title">
+        <span class="num">02</span>
+        Conservation Identity Calculator
+      </div>
+      <div class="panel-tag">γ + η = C</div>
+    </div>
+
+    <div class="slider-group">
+      <div class="slider-label">
+        <span class="name">γ — coupling coefficient</span>
+        <span class="value" id="gammaValue">0.80</span>
+      </div>
+      <input type="range" id="gammaSlider" min="0" max="1585" value="800" step="1">
+    </div>
+
+    <div class="slider-group">
+      <div class="slider-label">
+        <span class="name">η — noise floor</span>
+        <span class="value" id="etaValue">0.78</span>
+      </div>
+      <input type="range" id="etaSlider" min="0" max="1585" value="780" step="1">
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="stat-label">γ (coupling)</div>
+        <div class="stat-value highlight" id="gammaDisplay">0.800</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">η (noise)</div>
+        <div class="stat-value pink" id="etaDisplay">0.780</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">C = γ + η</div>
+        <div class="stat-value gold" id="cDisplay">1.580</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">log₂(3) target</div>
+        <div class="stat-value purple" id="log2Display">1.585</div>
+      </div>
+    </div>
+
+    <div class="viz-container" id="triangleViz"></div>
+
+    <div class="formula-bar">
+      <div class="formula-item" id="formula-conservation"></div>
+      <div class="formula-item" id="formula-shannon"></div>
+    </div>
+  </div>
+
+  <!-- PANEL 3: POLYGLOT BENCHMARK -->
+  <div class="panel">
+    <div class="scan-line" style="animation-delay: 4s;"></div>
+    <div class="panel-header">
+      <div class="panel-title">
+        <span class="num">03</span>
+        Polyglot Benchmark — Signal Throughput
+      </div>
+      <div class="panel-tag">9 languages</div>
+    </div>
+
+    <div id="benchmarkChart"></div>
+
+    <div class="formula-bar">
+      <div class="formula-item" id="formula-throughput"></div>
+    </div>
+  </div>
+
+  <footer>
+    <p>SuperInstance Conservation Explorer · Built on the Shannon Chain Rule</p>
+    <p style="margin-top:0.4rem;"><a href="https://superinstance.ai">superinstance.ai</a> · The conservation law holds: γ + η → log₂(3) ≈ 1.585 bits</p>
+  </footer>
+
+</div>
+
+<script>
+// ============================================================
+//  SUPERINSTANCE CONSERVATION EXPLORER
+//  Single-file interactive showcase
+// ============================================================
+
+(() => {
+  'use strict';
+
+  // ─── Helpers ───────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  const fmt = (n, d=3) => Number(n).toFixed(d);
+  const logSliderMap = (sliderVal, min, max) => {
+    const logMin = Math.log(min);
+    const logMax = Math.log(max);
+    return Math.exp(logMin + (sliderVal / 1000) * (logMax - logMin));
+  };
+  const fmtBig = (n) => {
+    if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+    return n.toFixed(0);
+  };
+  const fmtN = (n) => {
+    if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+    return n.toFixed(0);
+  };
+
+  // ─── Math ──────────────────────────────────────────────────
+  const delta = n => (1 / Math.sqrt(n)) * (1 - 3 / (2 * n));
+  const cancellation = n => (1 - delta(n)) * 100;
+  const LOG2_3 = Math.log2(3); // ≈ 1.5849625
+
+  // ============================================================
+  //  HERMIT CRAB ANIMATION
+  // ============================================================
+  const shells = ['Rust', 'Julia', 'C', 'Fortran', 'COBOL'];
+  let crabIdx = 0;
+
+  function initCrab() {
+    const stack = $('shellStack');
+    shells.forEach((name, i) => {
+      const el = document.createElement('div');
+      el.className = 'shell' + (i === 0 ? ' active' : '');
+      el.textContent = name;
+      el.id = 'shell-' + i;
+      stack.appendChild(el);
+    });
+    setTimeout(() => moveCrab(), 100);
+  }
+
+  function moveCrab() {
+    const crab = $('crab');
+    const container = $('crabContainer');
+    const target = $('shell-' + crabIdx);
+    if (!target) return;
+
+    // Deactivate all
+    shells.forEach((_, i) => {
+      const el = $('shell-' + i);
+      if (el) el.classList.remove('active');
+    });
+    target.classList.add('active');
+
+    // Position crab above the active shell
+    const containerRect = container.getBoundingClientRect();
+    const shellRect = target.getBoundingClientRect();
+    const left = shellRect.left - containerRect.left + shellRect.width / 2 - 14;
+    crab.style.left = left + 'px';
+
+    crabIdx = (crabIdx + 1) % shells.length;
+    setTimeout(moveCrab, 2200);
+  }
+
+  window.addEventListener('resize', () => {
+    // Reposition crab on resize
+    const crab = $('crab');
+    const container = $('crabContainer');
+    const target = $('shell-' + ((crabIdx - 1 + shells.length) % shells.length));
+    if (target) {
+      const containerRect = container.getBoundingClientRect();
+      const shellRect = target.getBoundingClientRect();
+      crab.style.transition = 'none';
+      crab.style.left = (shellRect.left - containerRect.left + shellRect.width / 2 - 14) + 'px';
+      setTimeout(() => crab.style.transition = '', 50);
+    }
+  });
+
+  // ============================================================
+  //  PANEL 1: FLEET CANCELLATION VISUALIZER
+  // ============================================================
+  const W1 = 760, H1 = 320;
+  const margin1 = { top: 20, right: 40, bottom: 45, left: 55 };
+  const iw = W1 - margin1.left - margin1.right;
+  const ih = H1 - margin1.top - margin1.bottom;
+
+  const svg1 = d3.select('#cancellationViz')
+    .append('svg')
+    .attr('viewBox', `0 0 ${W1} ${H1}`);
+
+  const defs1 = svg1.append('defs');
+  const grad1 = defs1.append('linearGradient')
+    .attr('id', 'curveGrad')
+    .attr('x1', '0%').attr('y1', '0%')
+    .attr('x2', '0%').attr('y2', '100%');
+  grad1.append('stop').attr('offset', '0%').attr('stop-color', '#00f5d4').attr('stop-opacity', 0.15);
+  grad1.append('stop').attr('offset', '100%').attr('stop-color', '#00f5d4').attr('stop-opacity', 0);
+
+  // Glow filter
+  const filt = defs1.append('filter').attr('id', 'glow');
+  filt.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'blur');
+  const merge = filt.append('feMerge');
+  merge.append('feMergeNode').attr('in', 'blur');
+  merge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+  const g1 = svg1.append('g')
+    .attr('transform', `translate(${margin1.left},${margin1.top})`);
+
+  // Scales (log x from 1 to 1e6)
+  const xScale = d3.scaleLog().domain([1, 1e6]).range([0, iw]).clamp(true);
+  const yMax = 1.0;
+  const yScale = d3.scaleLinear().domain([0, yMax]).range([ih, 0]);
+
+  // X axis
+  g1.append('g')
+    .attr('class', 'axis axis-x')
+    .attr('transform', `translate(0,${ih})`)
+    .call(d3.axisBottom(xScale)
+      .tickValues([1, 10, 100, 1000, 10000, 100000, 1000000])
+      .tickFormat(d => fmtN(d)))
+    .call(g => g.selectAll('text').style('fill', '#5a6f88').style('font-family', 'inherit').style('font-size', '11px'))
+    .call(g => g.selectAll('line').style('stroke', '#1e2b3d'))
+    .call(g => g.select('.domain').style('stroke', '#1e2b3d'));
+
+  // X label
+  g1.append('text')
+    .attr('x', iw / 2)
+    .attr('y', ih + 38)
+    .attr('text-anchor', 'middle')
+    .style('fill', '#5a6f88')
+    .style('font-size', '12px')
+    .text('Fleet Size (N) — log scale');
+
+  // Y axis
+  g1.append('g')
+    .attr('class', 'axis axis-y')
+    .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format('.2f')))
+    .call(g => g.selectAll('text').style('fill', '#5a6f88').style('font-family', 'inherit').style('font-size', '11px'))
+    .call(g => g.selectAll('line').style('stroke', '#1e2b3d'))
+    .call(g => g.select('.domain').style('stroke', '#1e2b3d'));
+
+  // Y label
+  g1.append('text')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -ih / 2)
+    .attr('y', -40)
+    .attr('text-anchor', 'middle')
+    .style('fill', '#5a6f88')
+    .style('font-size', '12px')
+    .text('δ(n) residual');
+
+  // Grid lines
+  g1.selectAll('.grid-line')
+    .data([0.2, 0.4, 0.6, 0.8])
+    .enter()
+    .append('line')
+    .attr('class', 'grid-line')
+    .attr('x1', 0).attr('x2', iw)
+    .attr('y1', d => yScale(d)).attr('y2', d => yScale(d))
+    .attr('stroke', '#1e2b3d')
+    .attr('stroke-dasharray', '2,4')
+    .attr('opacity', 0.5);
+
+  // δ(n) curve
+  const curveData = d3.range(0, 1.0, 0.005).map(t => {
+    const n = Math.exp(t * Math.log(1e6));
+    return { n, d: Math.max(0, delta(n)) };
+  });
+
+  const line1 = d3.line()
+    .x(d => xScale(d.n))
+    .y(d => yScale(d.d))
+    .curve(d3.curveCatmullRom);
+
+  // Area under curve
+  const area1 = d3.area()
+    .x(d => xScale(d.n))
+    .y0(ih)
+    .y1(d => yScale(d.d))
+    .curve(d3.curveCatmullRom);
+
+  g1.append('path')
+    .datum(curveData)
+    .attr('fill', 'url(#curveGrad)')
+    .attr('d', area1);
+
+  g1.append('path')
+    .datum(curveData)
+    .attr('fill', 'none')
+    .attr('stroke', '#00f5d4')
+    .attr('stroke-width', 2.5)
+    .attr('filter', 'url(#glow)')
+    .attr('d', line1);
+
+  // Moving dot
+  const dotGroup = g1.append('g');
+  const dotGlow = dotGroup.append('circle')
+    .attr('r', 14)
+    .attr('fill', '#00f5d4')
+    .attr('opacity', 0.15);
+  const dotMain = dotGroup.append('circle')
+    .attr('r', 6)
+    .attr('fill', '#00f5d4')
+    .attr('stroke', '#e8f0ff')
+    .attr('stroke-width', 1.5)
+    .attr('filter', 'url(#glow)');
+
+  // Dot label
+  const dotLabel = dotGroup.append('text')
+    .attr('y', -20)
+    .attr('text-anchor', 'middle')
+    .style('fill', '#00f5d4')
+    .style('font-size', '11px')
+    .style('font-family', 'inherit')
+    .text('');
+
+  // Particle system — flowing ternary signals
+  const particles = [];
+  const MAX_PARTICLES = 40;
+
+  function spawnParticle() {
+    if (particles.length >= MAX_PARTICLES) return;
+    const signal = [-1, 0, 1][Math.floor(Math.random() * 3)];
+    const colors = { '-1': '#ff2e88', '0': '#5a6f88', '1': '#00f5d4' };
+    particles.push({
+      x: Math.random() * iw,
+      y: ih + 10 + Math.random() * 15,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: -0.3 - Math.random() * 0.5,
+      signal,
+      color: colors[String(signal)],
+      life: 1.0,
+      size: 2 + Math.random() * 2,
+      label: signal > 0 ? '+1' : signal < 0 ? '−1' : ' 0'
+    });
+  }
+
+  const particleG = g1.append('g');
+
+  function updateParticles(n) {
+    const cancelRate = cancellation(n) / 100;
+    const spawnCount = Math.ceil((1 - cancelRate) * 3) + 1;
+
+    for (let i = 0; i < spawnCount; i++) {
+      if (Math.random() < 0.3) spawnParticle();
+    }
+
+    // Update
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy * (1 - cancelRate * 0.7);
+      p.life -= 0.008;
+      if (p.life <= 0 || p.y < 0) {
+        particles.splice(i, 1);
+      }
+    }
+
+    // Render
+    const sel = particleG.selectAll('.particle').data(particles);
+    sel.exit().remove();
+    const enter = sel.enter().append('g').attr('class', 'particle');
+    enter.append('circle').attr('class', 'p-dot');
+    enter.append('text').attr('class', 'p-text');
+
+    const merged = enter.merge(sel);
+    merged.attr('transform', d => `translate(${d.x},${d.y})`)
+      .attr('opacity', d => d.life);
+    merged.select('.p-dot')
+      .attr('r', d => d.size)
+      .attr('fill', d => d.color)
+      .attr('filter', 'url(#glow)');
+    merged.select('.p-text')
+      .attr('x', 0).attr('y', -2)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '8px')
+      .style('fill', d => d.color)
+      .style('font-family', 'inherit')
+      .style('font-weight', 'bold')
+      .text(d => d.label);
+  }
+
+  function updateCancellation() {
+    const sliderVal = +$('nSlider').value;
+    const n = Math.round(logSliderMap(sliderVal, 1, 1e6));
+
+    $('nValue').textContent = fmtN(n);
+    $('nDisplay').textContent = fmtN(n);
+
+    const d = delta(n);
+    const c = cancellation(n);
+
+    $('deltaDisplay').textContent = fmt(d, 4);
+    $('cancellationDisplay').textContent = fmt(c, 1) + '%';
+
+    // Entropy approaches log2(3) as cancellation increases
+    const entropy = LOG2_3 * (1 - d * 0.1);
+    $('entropyDisplay').textContent = fmt(Math.min(LOG2_3, entropy), 3) + ' bits';
+
+    // Update dot
+    const px = xScale(n);
+    const py = yScale(d);
+    dotGroup.attr('transform', `translate(${px},${py})`);
+    dotLabel.text(`N=${fmtN(n)} → ${fmt(c, 1)}%`);
+  }
+
+  // Animation loop
+  function animLoop() {
+    const sliderVal = +$('nSlider').value;
+    const n = Math.round(logSliderMap(sliderVal, 1, 1e6));
+    updateParticles(n);
+    requestAnimationFrame(animLoop);
+  }
+
+  $('nSlider').addEventListener('input', updateCancellation);
+
+  // ============================================================
+  //  PANEL 2: CONSERVATION IDENTITY (TRIANGLE)
+  // ============================================================
+  const W2 = 760, H2 = 320;
+  const margin2 = { top: 25, right: 40, bottom: 40, left: 55 };
+  const iw2 = W2 - margin2.left - margin2.right;
+  const ih2 = H2 - margin2.top - margin2.bottom;
+
+  const svg2 = d3.select('#triangleViz')
+    .append('svg')
+    .attr('viewBox', `0 0 ${W2} ${H2}`);
+
+  const defs2 = svg2.append('defs');
+  const grad2 = defs2.append('radialGradient').attr('id', 'triGrad');
+  grad2.append('stop').attr('offset', '0%').attr('stop-color', '#7c5cff').attr('stop-opacity', 0.2);
+  grad2.append('stop').attr('offset', '100%').attr('stop-color', '#7c5cff').attr('stop-opacity', 0.02);
+
+  const g2 = svg2.append('g')
+    .attr('transform', `translate(${margin2.left},${margin2.top})`);
+
+  // Triangle vertices (centered)
+  const triCenter = { x: iw2 / 2, y: ih2 / 2 + 10 };
+  const triR = Math.min(iw2, ih2) * 0.35;
+
+  function triVertex(angle, r = triR) {
+    return {
+      x: triCenter.x + r * Math.cos(angle - Math.PI / 2),
+      y: triCenter.y + r * Math.sin(angle - Math.PI / 2)
+    };
+  }
+
+  // Draw target circle at log2(3)
+  const targetR = triR * 0.92;
+  g2.append('circle')
+    .attr('cx', triCenter.x)
+    .attr('cy', triCenter.y)
+    .attr('r', targetR)
+    .attr('fill', 'none')
+    .attr('stroke', '#ffd93d')
+    .attr('stroke-width', 1.5)
+    .attr('stroke-dasharray', '5,5')
+    .attr('opacity', 0.4);
+
+  g2.append('text')
+    .attr('x', triCenter.x + targetR * 0.7)
+    .attr('y', triCenter.y - targetR * 0.7)
+    .style('fill', '#ffd93d')
+    .style('font-size', '10px')
+    .style('opacity', 0.6)
+    .text('log₂(3) = 1.585');
+
+  // Triangle (equilateral representing γ, η, C)
+  const v0 = triVertex(0);              // top — γ
+  const v1 = triVertex(2 * Math.PI / 3); // bottom-left — η
+  const v2 = triVertex(4 * Math.PI / 3); // bottom-right — C
+
+  // Filled triangle (dynamic)
+  const triPath = g2.append('path')
+    .attr('fill', 'url(#triGrad)')
+    .attr('stroke', 'none');
+
+  const triEdges = g2.append('path')
+    .attr('fill', 'none')
+    .attr('stroke', '#2a3f5f')
+    .attr('stroke-width', 1.5);
+
+  function updateTriangleShape(gamma, eta) {
+    const c = gamma + eta;
+    const cNorm = Math.min(c / LOG2_3, 1.0);
+    const gammaNorm = gamma / LOG2_3;
+    const etaNorm = eta / LOG2_3;
+
+    // Scale vertices based on values
+    const scale = Math.min(cNorm, 1) * 0.9 + 0.1;
+    const v0s = triVertex(0, triR * Math.max(0.1, gammaNorm));
+    const v1s = triVertex(2 * Math.PI / 3, triR * Math.max(0.1, etaNorm));
+    const v2s = triVertex(4 * Math.PI / 3, triR * Math.max(0.1, cNorm));
+
+    const path = `M ${v0s.x},${v0s.y} L ${v1s.x},${v1s.y} L ${v2s.x},${v2s.y} Z`;
+    triPath.attr('d', path);
+    triEdges.attr('d', path);
+  }
+
+  // Static outer triangle (reference)
+  const refPath = `M ${v0.x},${v0.y} L ${v1.x},${v1.y} L ${v2.x},${v2.y} Z`;
+  g2.append('path')
+    .attr('d', refPath)
+    .attr('fill', 'none')
+    .attr('stroke', '#1e2b3d')
+    .attr('stroke-width', 1)
+    .attr('stroke-dasharray', '3,6');
+
+  // Vertex labels
+  g2.append('text')
+    .attr('x', v0.x).attr('y', v0.y - 12)
+    .attr('text-anchor', 'middle')
+    .style('fill', '#00f5d4')
+    .style('font-size', '13px')
+    .style('font-weight', '600')
+    .text('γ');
+
+  g2.append('text')
+    .attr('x', v1.x - 15).attr('y', v1.y + 18)
+    .attr('text-anchor', 'middle')
+    .style('fill', '#ff2e88')
+    .style('font-size', '13px')
+    .style('font-weight', '600')
+    .text('η');
+
+  g2.append('text')
+    .attr('x', v2.x + 15).attr('y', v2.y + 18)
+    .attr('text-anchor', 'middle')
+    .style('fill', '#ffd93d')
+    .style('font-size', '13px')
+    .style('font-weight', '600')
+    .text('C');
+
+  // Center dot (C value indicator)
+  const centerDot = g2.append('g');
+  centerDot.append('circle')
+    .attr('r', 6)
+    .attr('fill', '#ffd93d')
+    .attr('filter', 'url(#glow)');
+  centerDot.append('text')
+    .attr('y', 3)
+    .attr('text-anchor', 'middle')
+    .style('font-size', '8px')
+    .style('font-weight', 'bold')
+    .style('fill', '#0a0e14');
+
+  // C tracker text
+  const cTracker = g2.append('text')
+    .attr('x', triCenter.x)
+    .attr('y', triCenter.y + 55)
+    .attr('text-anchor', 'middle')
+    .style('fill', '#ffd93d')
+    .style('font-size', '14px')
+    .style('font-weight', '600');
+
+  // Gamma bar (top-left)
+  const barW = 80, barH = 8;
+  const gammaBarG = g2.append('g')
+    .attr('transform', `translate(${iw2 - 110}, 20)`);
+  gammaBarG.append('text').attr('y', -6).style('fill', '#00f5d4').style('font-size', '10px').text('γ');
+  gammaBarG.append('rect').attr('width', barW).attr('height', barH).attr('fill', '#131c2a').attr('rx', 2);
+  const gammaBar = gammaBarG.append('rect').attr('height', barH).attr('fill', '#00f5d4').attr('rx', 2);
+
+  const etaBarG = g2.append('g')
+    .attr('transform', `translate(${iw2 - 110}, 45)`);
+  etaBarG.append('text').attr('y', -6).style('fill', '#ff2e88').style('font-size', '10px').text('η');
+  etaBarG.append('rect').attr('width', barW).attr('height', barH).attr('fill', '#131c2a').attr('rx', 2);
+  const etaBar = etaBarG.append('rect').attr('height', barH).attr('fill', '#ff2e88').attr('rx', 2);
+
+  const cBarG = g2.append('g')
+    .attr('transform', `translate(${iw2 - 110}, 70)`);
+  cBarG.append('text').attr('y', -6).style('fill', '#ffd93d').style('font-size', '10px').text('C');
+  cBarG.append('rect').attr('width', barW).attr('height', barH).attr('fill', '#131c2a').attr('rx', 2);
+  const cBar = cBarG.append('rect').attr('height', barH).attr('fill', '#ffd93d').attr('rx', 2);
+
+  // Target line on bars
+  const targetLineX = barW * (LOG2_3 / (LOG2_3 * 2));
+  cBarG.append('line')
+    .attr('x1', targetLineX).attr('x2', targetLineX)
+    .attr('y1', -2).attr('y2', barH + 2)
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 1)
+    .attr('opacity', 0.3);
+
+  function updateConservation() {
+    const gamma = +$('gammaSlider').value / 1000;
+    const eta = +$('etaSlider').value / 1000;
+    const C = gamma + eta;
+
+    $('gammaValue').textContent = fmt(gamma, 3);
+    $('etaValue').textContent = fmt(eta, 3);
+    $('gammaDisplay').textContent = fmt(gamma, 3);
+    $('etaDisplay').textContent = fmt(eta, 3);
+    $('cDisplay').textContent = fmt(C, 3);
+    $('log2Display').textContent = fmt(LOG2_3, 3);
+
+    updateTriangleShape(gamma, eta);
+
+    // Center dot position — distance from center proportional to |C - log2(3)|
+    const deviation = C - LOG2_3;
+    const maxDev = LOG2_3;
+    const r = Math.min(Math.abs(deviation) / maxDev, 1) * triR * 0.3;
+    const angle = deviation > 0 ? 0 : Math.PI;
+    centerDot.attr('transform', `translate(${r * Math.cos(angle)}, ${r * Math.sin(angle)})`);
+
+    const closeness = (1 - Math.abs(deviation) / LOG2_3) * 100;
+    cTracker.text(`C = ${fmt(C, 3)} · ${fmt(closeness, 1)}% of log₂(3)`);
+
+    // Bars (normalize to C_max = 2*log2(3))
+    const maxScale = LOG2_3 * 2;
+    gammaBar.attr('width', barW * (gamma / maxScale));
+    etaBar.attr('width', barW * (eta / maxScale));
+    cBar.attr('width', barW * (C / maxScale));
+  }
+
+  $('gammaSlider').addEventListener('input', updateConservation);
+  $('etaSlider').addEventListener('input', updateConservation);
+
+  // ============================================================
+  //  PANEL 3: POLYGLOT BENCHMARK CHART
+  // ============================================================
+  const benchData = [
+    { lang: 'Rust',     speed: 9.2e9,  color: '#ff4500', icon: '🦀' },
+    { lang: 'Julia',    speed: 4.8e9,  color: '#9558b2', icon: '⚡' },
+    { lang: 'C',        speed: 3.2e9,  color: '#5c6bc0', icon: '🔧' },
+    { lang: 'Fortran',  speed: 1.0e9,  color: '#4fc3f7', icon: '🔢' },
+    { lang: 'D',        speed: 5.0e7,  color: '#b0413e', icon: '🔷' },
+    { lang: 'Octave',   speed: 9.77e7, color: '#07a0c3', icon: '📈' },
+    { lang: 'R',        speed: 3.25e7, color: '#276dc3', icon: '📊' },
+    { lang: 'Elixir',   speed: 2.0e7,  color: '#6d4aff', icon: '💧' },
+    { lang: 'COBOL',    speed: 5.0e6,  color: '#607d8b', icon: '🏛️' }
+  ].sort((a, b) => b.speed - a.speed);
+
+  const benchContainer = d3.select('#benchmarkChart');
+  const benchMax = d3.max(benchData, d => d.speed);
+
+  benchData.forEach((d, i) => {
+    const row = benchContainer.append('div').attr('class', 'bar-row');
+
+    row.append('div')
+      .attr('class', 'bar-label')
+      .html(`${d.icon} ${d.lang}`);
+
+    const track = row.append('div').attr('class', 'bar-track').node();
+    const fill = document.createElement('div');
+    fill.className = 'bar-fill';
+    fill.style.background = `linear-gradient(90deg, ${d.color}, ${d.color}dd)`;
+    fill.style.width = '0%';
+    track.appendChild(fill);
+
+    // Value label inside bar
+    fill.textContent = fmtBig(d.speed) + ' sig/s';
+
+    row.append('div')
+      .attr('class', 'bar-value')
+      .text(fmtBig(d.speed) + ' sig/s');
+
+    // Animate after a short delay
+    setTimeout(() => {
+      const pct = Math.log(d.speed / 5e6) / Math.log(benchMax / 5e6) * 100;
+      fill.style.width = Math.max(pct, 3) + '%';
+    }, 100 + i * 80);
+  });
+
+  // Speed ratio stats
+  const benchStats = d3.select('#benchmarkChart')
+    .append('div')
+    .attr('class', 'stat-grid')
+    .style('margin-top', '1.5rem');
+
+  const fastest = benchData[0];
+  const slowest = benchData[benchData.length - 1];
+  const ratio = fastest.speed / slowest.speed;
+
+  const stat1 = benchStats.append('div').attr('class', 'stat');
+  stat1.append('div').attr('class', 'stat-label').text('Fastest');
+  stat1.append('div').attr('class', 'stat-value highlight').html(`${fastest.icon} ${fastest.lang}`);
+
+  const stat2 = benchStats.append('div').attr('class', 'stat');
+  stat2.append('div').attr('class', 'stat-label').text('Slowest');
+  stat2.append('div').attr('class', 'stat-value pink').html(`${slowest.icon} ${slowest.lang}`);
+
+  const stat3 = benchStats.append('div').attr('class', 'stat');
+  stat3.append('div').attr('class', 'stat-label').text('Speed ratio');
+  stat3.append('div').attr('class', 'stat-value gold').text(fmt(ratio, 0) + '×');
+
+  const stat4 = benchStats.append('div').attr('class', 'stat');
+  stat4.append('div').attr('class', 'stat-label').text('Rust vs COBOL');
+  stat4.append('div').attr('class', 'stat-value purple').text(fmt(9.2e9 / 5e6, 0) + '×');
+
+  // ============================================================
+  //  KATEX FORMULAS
+  // ============================================================
+  function renderFormulas() {
+    if (typeof renderMathInElement === 'undefined') {
+      setTimeout(renderFormulas, 100);
+      return;
+    }
+    const r = (el, tex) => {
+      if (el) katex.render(tex, el, { throwOnError: false, displayMode: false });
+    };
+    r($('formula-delta'), '\\delta(n) = \\frac{1}{\\sqrt{n}}\\left(1 - \\frac{3}{2n}\\right)');
+    r($('formula-cancellation'), '\\text{cancellation} \\to 100\\% \\text{ as } n \\to \\infty');
+    r($('formula-conservation'), '\\gamma + \\eta = C');
+    r($('formula-shannon'), 'C \\to \\log_2(3) \\approx 1.585 \\text{ bits}');
+    r($('formula-throughput'), '\\text{throughput}_{\\text{Rust}} / \\text{throughput}_{\\text{COBOL}} = 1840\\times');
+  }
+
+  // ============================================================
+  //  INIT
+  // ============================================================
+  initCrab();
+  updateCancellation();
+  updateConservation();
+  animLoop();
+  renderFormulas();
+
+})();
+</script>
+</body>
+</html>
